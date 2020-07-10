@@ -1,0 +1,72 @@
+---
+# Create Apache webserver that serves files from EBS-backed directory
+- hosts: all
+  become: true
+  become_user: root
+  tasks:
+    # Configure EBS filesystem and populate with index.html
+    - name: Create primary partition on EBS volume
+      parted:
+        device: /dev/xvdf
+        number: 1
+        state: present
+  
+    - name: Create filesystem on primary partition
+      filesystem:
+        fstype: xfs
+        dev: /dev/xvdf1
+        opts: "-L hello"
+  
+    - name: Create directory for mount
+      file:
+        path: /var/hello-aws
+        state: directory
+        mode: '0755'
+
+    - name: Mount filesystem with label and write to fstab
+      mount:
+        state: mounted
+        path: /var/hello-aws 
+        src: LABEL=hello
+        fstype: xfs 
+
+    - name: Copy files to mount
+      copy:
+        src: ./data/
+        dest: /var/hello-aws/
+    
+    # Configure Apache to serve files from EBS filesystem
+    - name: Install Apache
+      yum:
+        name: httpd         
+        state: latest
+    
+    - name: Set Apache to start on boot
+      service: 
+        name: httpd
+        enabled: yes
+      
+    - name: Move Apache DocumentRoot to EBS filesystem
+      lineinfile:
+        path: /etc/httpd/conf/httpd.conf
+        regexp: '^DocumentRoot '
+        line: DocumentRoot "/var/hello-aws"
+      notify: restart httpd
+  
+    - name: Allow access to new DocumentRoot
+      blockinfile:
+        path: /etc/httpd/conf/httpd.conf
+        block: |
+          <Directory "/var/hello-aws">
+              AllowOverride None
+              Require all granted
+          </Directory>
+      notify: restart httpd
+
+  handlers:
+    - name: restart httpd
+      service:
+        name: httpd
+        state: restarted
+
+  
