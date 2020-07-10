@@ -1,4 +1,4 @@
-# hello-aws
+# Terraform + Ansible Hello World in AWS
 
 A simple Apache webserver, running on AWS EC2 and serving files from EBS volume.  
 
